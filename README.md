@@ -8,12 +8,12 @@ The repository contains pre-trained LeNet models (R0 and B1 from [Table 1.](http
 
 Please cite BANG in your publications if it helps your research:
 
-  @article{rozsa2016towards,
-    title={Towards Robust Deep Neural Networks with BANG},
-    author={Rozsa, Andras and G\"unther, Manuel and Boult, Terrance E.},
-    journal={arXiv preprint arXiv:1612.00138},
-    year={2016}
-  }
+    @article{rozsa2016towards,
+      title={Towards Robust Deep Neural Networks with BANG},
+      author={Rozsa, Andras and G\"unther, Manuel and Boult, Terrance E.},
+      journal={arXiv preprint arXiv:1612.00138},
+      year={2016}
+    }
 
 
 Please read below the original README of Caffe.
