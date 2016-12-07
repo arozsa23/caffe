@@ -50,6 +50,15 @@ void CuDNNConvolutionLayer<Dtype>::Backward_gpu(const vector<Blob<Dtype>*>& top,
     const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom) {
   const Dtype* weight = NULL;
   Dtype* weight_diff = NULL;
+
+  // *****************************************************************************
+  // BANG
+  const Dtype beta = this->layer_param_.convolution_param().beta();
+  const Dtype epsilon = this->layer_param_.convolution_param().epsilon();
+  const Dtype ratio = this->layer_param_.convolution_param().ratio();
+  const vector<bool>& classifications = Caffe::classifications();
+  // *****************************************************************************
+
   if (this->param_propagate_down_[0]) {
     weight = this->blobs_[0]->gpu_data();
     weight_diff = this->blobs_[0]->mutable_gpu_diff();
@@ -62,6 +71,64 @@ void CuDNNConvolutionLayer<Dtype>::Backward_gpu(const vector<Blob<Dtype>*>& top,
     const Dtype* top_diff = top[i]->gpu_diff();
     // Backward through cuDNN in parallel over groups and gradients.
     for (int g = 0; g < this->group_; g++) {
+
+      // Gradient w.r.t. bottom data.
+      if (propagate_down[i]) {
+        if (weight == NULL) {
+          weight = this->blobs_[0]->gpu_data();
+        }
+        Dtype* bottom_diff = bottom[i]->mutable_gpu_diff();
+        CUDNN_CHECK(cudnnConvolutionBackwardData(
+              handle_[2*this->group_ + g],
+              cudnn::dataType<Dtype>::one,
+              filter_desc_, weight + this->weight_offset_ * g,
+              top_descs_[i], top_diff + top_offset_ * g,
+              conv_descs_[i],
+              bwd_data_algo_[i], workspace[2*this->group_ + g],
+              workspace_bwd_data_sizes_[i],
+              cudnn::dataType<Dtype>::zero,
+              bottom_descs_[i], bottom_diff + bottom_offset_ * g));
+      }
+    }
+
+    // Weight diffs (including bias): Based on scaled original top_diff if necessary
+
+    // *****************************************************************************
+    // BANG: re-scaling top_diff based on L-2 norms of batch elements
+    Dtype* mutable_top_diff = top[i]->mutable_gpu_diff();
+
+    if (beta != 0.0) {
+      int batch_size = top[i]->shape(0);
+      // Storing L-2 norms for elements of the batch
+      vector<Dtype> l2_norms(batch_size);
+      Dtype max_l2 = 0.0;
+
+      for (int j = 0; j < batch_size; ++j) {
+        Dtype diff_l2;
+        caffe_gpu_dot(this->top_dim_, top_diff + j * this->top_dim_,
+                      top_diff + j * this->top_dim_, &diff_l2);
+        diff_l2 = std::sqrt(diff_l2);
+        max_l2 = std::max(max_l2, diff_l2);
+        l2_norms[j] = diff_l2;
+      }
+
+      // Scaling
+      for (int j = 0; j < batch_size; ++j) {
+        if (l2_norms[j] != 0.0) {
+          Dtype eps = epsilon;
+          if (classifications[j] == 0) {
+            // Incorrectly classified sample
+            eps = epsilon * ratio;
+          }
+          const Dtype scale = pow( max_l2 / l2_norms[j], eps * (1. - l2_norms[j] / max_l2));
+          caffe_gpu_scal(this->top_dim_, scale, mutable_top_diff + j * this->top_dim_);
+        }
+      }
+    }
+    // *****************************************************************************
+
+    for (int g = 0; g < this->group_; g++) {
+
       // Gradient w.r.t. bias.
       if (this->bias_term_ && this->param_propagate_down_[1]) {
         CUDNN_CHECK(cudnnConvolutionBackwardBias(handle_[0*this->group_ + g],
@@ -86,23 +153,6 @@ void CuDNNConvolutionLayer<Dtype>::Backward_gpu(const vector<Blob<Dtype>*>& top,
               filter_desc_, weight_diff + this->weight_offset_ * g));
       }
 
-      // Gradient w.r.t. bottom data.
-      if (propagate_down[i]) {
-        if (weight == NULL) {
-          weight = this->blobs_[0]->gpu_data();
-        }
-        Dtype* bottom_diff = bottom[i]->mutable_gpu_diff();
-        CUDNN_CHECK(cudnnConvolutionBackwardData(
-              handle_[2*this->group_ + g],
-              cudnn::dataType<Dtype>::one,
-              filter_desc_, weight + this->weight_offset_ * g,
-              top_descs_[i], top_diff + top_offset_ * g,
-              conv_descs_[i],
-              bwd_data_algo_[i], workspace[2*this->group_ + g],
-              workspace_bwd_data_sizes_[i],
-              cudnn::dataType<Dtype>::zero,
-              bottom_descs_[i], bottom_diff + bottom_offset_ * g));
-      }
     }
 
     // Synchronize the work across groups, each of which went into its own
@@ -110,6 +160,16 @@ void CuDNNConvolutionLayer<Dtype>::Backward_gpu(const vector<Blob<Dtype>*>& top,
     // NOLINT_NEXT_LINE(whitespace/operators)
     sync_conv_groups<<<1, 1>>>();
   }
+
+  // *****************************************************************************
+  // BANG: applying local learning rate (beta of BANG)
+  if (beta != 0.0) {
+    // Scale bias_diff with beta
+    this->blobs_[1]->scale_diff(beta);
+    // Scale weight_diff with beta
+    this->blobs_[0]->scale_diff(beta);
+  }
+  // *****************************************************************************
 }
 
 INSTANTIATE_LAYER_GPU_FUNCS(CuDNNConvolutionLayer);

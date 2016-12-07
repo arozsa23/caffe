@@ -164,6 +164,11 @@ class Caffe {
   inline static bool root_solver() { return Get().root_solver_; }
   inline static void set_root_solver(bool val) { Get().root_solver_ = val; }
 
+  // ******************************************************************************
+  // BANG
+  inline static vector<bool>& classifications() { return Get().classifications_; }
+  // ******************************************************************************
+
  protected:
 #ifndef CPU_ONLY
   cublasHandle_t cublas_handle_;
@@ -174,6 +179,11 @@ class Caffe {
   Brew mode_;
   int solver_count_;
   bool root_solver_;
+
+  // ******************************************************************************
+  // BANG: Holds which batch element is correctly/incorrectly classified
+  vector<bool> classifications_;
+  // ******************************************************************************
 
  private:
   // The private constructor to avoid duplicate instantiation.

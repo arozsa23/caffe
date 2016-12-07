@@ -120,6 +120,31 @@ void SoftmaxWithLossLayer<Dtype>::Backward_gpu(const vector<Blob<Dtype>*>& top,
     const Dtype loss_weight = top[0]->cpu_diff()[0] /
                               get_normalizer(normalization_, valid_count);
     caffe_gpu_scal(prob_.count(), loss_weight , bottom_diff);
+
+    // *****************************************************************************
+    // BANG: checking whether given batch element is correctly classified
+    vector<bool>& classifications = Caffe::classifications();
+    classifications.resize(outer_num_);
+
+    for (int i = 0; i < outer_num_; ++i) {
+      for (int j = 0; j < inner_num_; ++j) {
+        const int label_value = static_cast<int>(bottom[1]->data_at(i * inner_num_ + j,0,0,0));
+
+        // NOTE: since cuBLAS does not have a max or argmax function, we do it the hard way..
+        int argmax = 0;
+        Dtype max = FLT_MIN;
+        for (int k = 0; k < dim; ++k) {
+          if (prob_.data_at(i,k,0,0) > max) {
+            max = prob_.data_at(i,k,0,0);
+            argmax = k;
+          }
+        }
+
+        classifications[i] = argmax == label_value;
+      }
+    }
+    // *****************************************************************************
+
   }
 }
 

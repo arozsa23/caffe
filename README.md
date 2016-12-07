@@ -1,3 +1,23 @@
+# Caffe with BANG (Batch Adjusted Network Gradients)
+
+This Caffe repository contains the code of our BANG approach which can significantly improve the robustness of deep neural networks without using additional training samples or any sort of data augmentation technique. For further details about BANG, please refer to our paper: [Towards Robust Deep Neural Networks with BANG](https://arxiv.org/abs/1612.00138).
+
+BANG is implemented for InnerProduct and Convolutional layers (CPU, GPU, and cuDNN), and it can be used to train learning models only on a single GPU.
+
+The repository contains pre-trained LeNet models (R0 and B1 from [Table 1.](https://arxiv.org/abs/1612.00138) under models/mnist folder) and Cifar-10 models (R0 and B0 from [Table 2.](https://arxiv.org/abs/1612.00138) in models/cifar10 folder), as well as model definition files used to train those models. In order to train models regularly, you can set beta to zero for all layers or, alternatively, remove all BANG parameters (beta, epsilon, and ratio) from those files.
+
+Please cite BANG in your publications if it helps your research:
+
+@article{rozsa2016towards,
+  title={Towards Robust Deep Neural Networks with BANG},
+  author={Rozsa, Andras and G\"unther, Manuel and Boult, Terrance E.},
+  journal={arXiv preprint arXiv:1612.00138},
+  year={2016}
+}
+
+
+Please read below the original README of Caffe.
+
 # Caffe
 
 [![Build Status](https://travis-ci.org/BVLC/caffe.svg?branch=master)](https://travis-ci.org/BVLC/caffe)

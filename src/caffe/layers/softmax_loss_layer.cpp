@@ -128,6 +128,13 @@ void SoftmaxWithLossLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
     const Dtype* label = bottom[1]->cpu_data();
     int dim = prob_.count() / outer_num_;
     int count = 0;
+
+    // *****************************************************************************
+    // BANG
+    vector<bool>& classifications = Caffe::classifications();
+    classifications.resize(outer_num_);
+    // *****************************************************************************
+
     for (int i = 0; i < outer_num_; ++i) {
       for (int j = 0; j < inner_num_; ++j) {
         const int label_value = static_cast<int>(label[i * inner_num_ + j]);
@@ -139,6 +146,17 @@ void SoftmaxWithLossLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
           bottom_diff[i * dim + label_value * inner_num_ + j] -= 1;
           ++count;
         }
+
+        // *****************************************************************************
+        // BANG: checking whether given batch element is correctly classified
+
+        // Getting index of highest prob for given batch element
+        const Dtype* max_pred = std::max_element(prob_data + i * dim, prob_data + i * dim + dim);
+        int argmax = max_pred - (prob_data + i * dim);
+
+        classifications[i] = argmax == label_value;
+        // *****************************************************************************
+
       }
     }
     // Scale gradient
